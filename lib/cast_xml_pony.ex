@@ -8,6 +8,57 @@ defmodule CastXMLPony do
     File.read!(filename)
   end
 
+  def structs(filename, fid) do
+    f(filename)
+    |> xpath(~x"/CastXML/Struct[@file='#{fid}']/@name"ls)
+  end
+
+  def useStructReal(filename, structname) do
+    structByName(filename, structname)
+  end
+
+  def structByName(filename, name) do
+    smap =
+    f(filename)
+    |> xpath(~x"/CastXML/Struct[@name='#{name}']",
+               id:   ~x"./@id"s,
+               name: ~x"./@name"s,
+               members: ~x"./@members"s,
+               align: ~x"./@align"s,
+               size: ~x"./@size"s
+    )
+
+    case Map.get(smap, :members) do
+      "" -> "primitive #{toPonyPrimitive(smap.name)}"
+      x -> fields =
+           String.split(x, " ") 
+           |> Enum.map(&(fieldMap(filename, &1)))
+           |> Enum.map(fn(%{name: name, ponytype: ponytype, offset: offset}) -> "  var #{name}: #{ponytype} = #{ponydefault(ponytype)}" end)
+           |> Enum.join("\n")
+
+      """
+      struct #{toPonyPrimitive(smap.name)}
+      #{fields}
+      """
+    
+    end
+  end
+
+  def ponydefault(x = <<"Pointer"::utf8, rest::binary>>), do: x
+  def ponydefault(x), do: "#{x}(0)"
+
+
+  def fieldMap(filename, id) do
+    map =
+    f(filename)
+    |> xpath(~x"/CastXML/Field[@id='#{id}']",
+               name: ~x"./@name"s,
+               type: ~x"./@type"s,
+               offset: ~x"./@offset"s)
+
+    Map.put(map, :ponytype, recurseType(filename, map.type))
+  end
+
   def useFunction(filename, functionname) do
     txt = useFunctionReal(filename, functionname)
     case Regex.match?(~r/FUNCTIONPOINTER/, txt) do
@@ -68,6 +119,7 @@ defmodule CastXMLPony do
     |> Enum.reduce("", &rationalizeType/2)
   end
 
+  def rationalizeType(%{name: name, recordType: :Field}, acc), do: acc
   def rationalizeType(%{name: name, recordType: :Enumeration}, acc), do: "I32"
   def rationalizeType(%{name: name, recordType: :FunctionType}, acc), do: "FUNCTIONPOINTER"
   def rationalizeType(%{name: name, recordType: :Struct}, acc), do: toPonyPrimitive(name) <> acc
