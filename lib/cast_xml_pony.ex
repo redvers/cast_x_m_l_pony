@@ -2,12 +2,17 @@ import SweetXml
 defmodule CastXMLPony do
   use Memoize
   def main(args) do
-    opts = [xmlfile: :string, structs: :boolean, uses: :boolean, list: :boolean, fileid: :string, generate: :boolean]
-    aliases = [x: :xmlfile, s: :structs, u: :uses, l: :list, f: :fileid, g: :generate]
+    opts = [help: :boolean, xmlfile: :string, structs: :boolean, uses: :boolean, list: :boolean, fileid: :string, generate: :boolean]
+    aliases = [h: :help, x: :xmlfile, s: :structs, u: :uses, l: :list, f: :fileid, g: :generate]
     options = [strict: opts, aliases: aliases]
     {opts,_} = OptionParser.parse!(args, options)
 
     optmap = Enum.into(opts, Map.new)
+
+    if (Map.get(optmap, :help, false)) do
+      printhelp()
+      :erlang.halt()
+    end
 
     if (Map.get(optmap, :list, false) and (Map.get(optmap, :fileid, false) == false)), do: listfiles(optmap.xmlfile)
     if (Map.get(optmap, :list, false) and is_binary(Map.get(optmap, :fileid, false))) do
@@ -40,6 +45,134 @@ defmodule CastXMLPony do
 
   end
 
+  def printhelp() do
+    IO.puts(
+    """
+    Usage: ./cast_x_m_l_pony [options]
+      --help (-h): Display this help
+
+      ### MANDATORY FIELD
+      #    All operations require the output from CastXML to find in the form of and XML file.
+      #  This XML file contains the metadata that describes all the C-FFI parameter information
+      #  for all the parsed header files all the way down to basic C types.
+      --xmlfile (-x): The CastXML file for analysis
+
+      ### OPERATION
+      #    There are two basic modes, list and generate.
+
+      ### List mode: --list (-l)
+      #    List mode provides human-readable output which is used to explore or prepare your
+      #  API spec for export.  We currently support three modes.  With the exception of the
+      #  'Header File inventory' mode - it requires a --fileid option.
+      #
+      #  See the example below.
+      
+      ##  Header File inventory: Lists the .h files that have been parsed in the provided XML
+      #  file. Since we don't want to generate struct and use statements for EVERY dependency
+      #  for the library (including glibc) we use the .h files to choose which namespaces
+      #  to process.
+      #
+      #  This command lists the full paths to the header files and the id to refer to them with:
+      ./cast_x_m_l_pony --xmlfile pcre2.xml -l
+
+      ##  Struct Inventory: Lists all the structs that are present in the selected .h file.
+      ./cast_x_m_l_pony --xmlfile examples/pcre2.xml -l -f f26 -s
+
+      ##  Function Inventory: Lists all the functions that are present in the selected .h file.
+      ./cast_x_m_l_pony --xmlfile examples/pcre2.xml -l -f f26 -u
+
+      ### Generation Mode: --generate (-g)
+      #    Generation mode produces a (hopefully) syntactically correct pony code template
+      #  for your C-FFI needs.  It may even compile sometimes :-)
+
+      ## Struct Generation:
+      ./cast_x_m_l_pony --xmlfile examples/pcre2.xml -g -f f26 -u
+
+      ## use (Function) Generation:
+      ./cast_x_m_l_pony --xmlfile examples/pcre2.xml -g -f f26 -u
+
+
+      ### EXAMPLE WORKFLOW
+
+      1. Generate the XML file:
+         castxml --castxml-output=1,0,0 -I/nix/store/ny3mzqk9jiyfkmvd5z84mbdg3m16ppjn-pcre2-10.36-dev/include -I/nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include /nix/store/ny3mzqk9jiyfkmvd5z84mbdg3m16ppjn-pcre2-10.36-dev/include/pcre2.h -DPCRE2_CODE_UNIT_WIDTH=8
+
+      2. Ensure your xml file is generated!
+         -rw-r--r-- 1 red users 189832 Mar  2 23:51 pcre2.xml
+
+      3. Identify which files are present and you wish to generate for:
+         [nix-shell:~/projects/pony/cast_x_m_l_pony]$ ./cast_x_m_l_pony --xmlfile examples/pcre2.xml -l
+         f0: <builtin>
+         f1: /nix/store/kcihlm9hisj42rd92108h7z93dz7h5a8-CastXML-0.3.4/share/castxml/clang/include/stddef.h
+         f2: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/floatn-common.h
+         f3: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/stdlib.h
+         f4: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/types.h
+         f5: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/sys/types.h
+         f6: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/types/clock_t.h
+         f7: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/types/clockid_t.h
+         f8: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/types/time_t.h
+         f9: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/types/timer_t.h
+         f10: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/stdint-intn.h
+         f11: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/byteswap.h
+         f12: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/uintn-identity.h
+         f13: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/types/__sigset_t.h
+         f14: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/types/sigset_t.h
+         f15: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/types/struct_timeval.h
+         f16: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/types/struct_timespec.h
+         f17: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/sys/select.h
+         f18: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/thread-shared-types.h
+         f19: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/struct_mutex.h
+         f20: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/struct_rwlock.h
+         f21: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/pthreadtypes.h
+         f22: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/alloca.h
+         f23: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/bits/stdint-uintn.h
+         f24: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/stdint.h
+         f25: /nix/store/x1h3zxbr0bif0xr2l44x2pl5hnnc2n0j-glibc-2.32-35-dev/include/inttypes.h
+         f26: /nix/store/ny3mzqk9jiyfkmvd5z84mbdg3m16ppjn-pcre2-10.36-dev/include/pcre2.h
+
+      4. Inventory or YOLO?
+
+         [nix-shell:~/projects/pony/cast_x_m_l_pony]$ ./cast_x_m_l_pony --xmlfile examples/pcre2.xml -g -f f26 -u
+         use @pcre2_config_8[I32](anon0: U32, anon1: Pointer[None])
+         use @pcre2_general_context_copy_8[Pointer[Pcre2RealGeneralContext8]](anon0: Pointer[Pcre2RealGeneralContext8])
+         // Not Implemented Yet: use @pcre2_general_context_create_8[Pointer[Pcre2RealGeneralContext8]](anon0: Pointer[FUNCTIONPOINTER], anon1: Pointer[FUNCTIONPOINTER], anon2: Pointer[None])
+         use @pcre2_general_context_free_8[None](anon0: Pointer[Pcre2RealGeneralContext8])
+         use @pcre2_compile_context_copy_8[Pointer[Pcre2RealCompileContext8]](anon0: Pointer[Pcre2RealCompileContext8])
+         use @pcre2_compile_context_create_8[Pointer[Pcre2RealCompileContext8]](anon0: Pointer[Pcre2RealGeneralContext8])
+         use @pcre2_compile_context_free_8[None](anon0: Pointer[Pcre2RealCompileContext8])
+     <SNIP>
+         
+         
+         [nix-shell:~/projects/pony/cast_x_m_l_pony]$ ./cast_x_m_l_pony --xmlfile examples/pcre2.xml -g -f f26 -s
+         primitive Pcre2RealGeneralContext8
+         primitive Pcre2RealCompileContext8
+         primitive Pcre2RealMatchContext8
+         primitive Pcre2RealConvertContext8
+         primitive Pcre2RealCode8
+         primitive Pcre2RealMatchData8
+         primitive Pcre2RealJitStack8
+         
+         struct Pcre2CalloutBlock8
+           var version: U32 = U32(0) // offset: 0
+           var callout_number: U32 = U32(0) // offset: 32
+           var capture_top: U32 = U32(0) // offset: 64
+           var capture_last: U32 = U32(0) // offset: 96
+           var offset_vector: Pointer[U64] = Pointer[U64] // offset: 128
+           var mark: Pointer[U8] = Pointer[U8] // offset: 192
+           var subject: Pointer[U8] = Pointer[U8] // offset: 256
+           var subject_length: U64 = U64(0) // offset: 320
+           var start_match: U64 = U64(0) // offset: 384
+           var current_position: U64 = U64(0) // offset: 448
+           var pattern_position: U64 = U64(0) // offset: 512
+           var next_item_length: U64 = U64(0) // offset: 576
+           var callout_string_offset: U64 = U64(0) // offset: 640
+           var callout_string_length: U64 = U64(0) // offset: 704
+           var callout_string: Pointer[U8] = Pointer[U8] // offset: 768
+           var callout_flags: U32 = U32(0) // offset: 832
+      <SNIP>
+    """)
+
+  end
   def listfiles(filename) do
     f(filename)
     |> xpath(~x"/CastXML/File"l, name: ~x"./@name"s, id: ~x"./@id"s)
