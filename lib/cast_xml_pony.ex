@@ -1,9 +1,53 @@
 import SweetXml
 defmodule CastXMLPony do
   use Memoize
-  def main() do
-    f("pcre2.xml")
+  def main(args) do
+    opts = [xmlfile: :string, structs: :boolean, uses: :boolean, list: :boolean, fileid: :string, generate: :boolean]
+    aliases = [x: :xmlfile, s: :structs, u: :uses, l: :list, f: :fileid, g: :generate]
+    options = [strict: opts, aliases: aliases]
+    {opts,_} = OptionParser.parse!(args, options)
+
+    optmap = Enum.into(opts, Map.new)
+
+    if (Map.get(optmap, :list, false) and (Map.get(optmap, :fileid, false) == false)), do: listfiles(optmap.xmlfile)
+    if (Map.get(optmap, :list, false) and is_binary(Map.get(optmap, :fileid, false))) do
+      if (Map.get(optmap, :structs, false)) do
+        IO.puts("Structs:")
+        structs(optmap.xmlfile, optmap.fileid)
+        |> Enum.map(&IO.puts/1)
+      end
+      if (Map.get(optmap, :uses, false)) do
+        IO.puts("Functions:")
+        functions(optmap.xmlfile, optmap.fileid)
+        |> Enum.map(&IO.puts/1)
+      end
+    end
+
+    if (Map.get(optmap, :generate, false) and is_binary(Map.get(optmap, :fileid, false))) do
+      if (Map.get(optmap, :structs, false)) do
+        structs(optmap.xmlfile, optmap.fileid)
+        |> Enum.map(&(useStructReal(optmap.xmlfile, &1)))
+        |> Enum.join("\n\n")
+        |> IO.puts
+      end
+      if (Map.get(optmap, :uses, false)) do
+        functions(optmap.xmlfile, optmap.fileid)
+        |> Enum.map(&(useFunction(optmap.xmlfile, &1)))
+        |> Enum.join("\n")
+        |> IO.puts
+      end
+    end
+
   end
+
+  def listfiles(filename) do
+    f(filename)
+    |> xpath(~x"/CastXML/File"l, name: ~x"./@name"s, id: ~x"./@id"s)
+    |> Enum.map(fn(%{id: id, name: name}) -> "#{id}: #{name}" end)
+    |> Enum.map(&IO.puts/1)
+  end
+
+
   def f(filename) do
     File.read!(filename)
   end
@@ -33,7 +77,7 @@ defmodule CastXMLPony do
       x -> fields =
            String.split(x, " ") 
            |> Enum.map(&(fieldMap(filename, &1)))
-           |> Enum.map(fn(%{name: name, ponytype: ponytype, offset: offset}) -> "  var #{name}: #{ponytype} = #{ponydefault(ponytype)}" end)
+           |> Enum.map(fn(%{name: name, ponytype: ponytype, offset: offset}) -> "  var #{name}: #{ponytype} = #{ponydefault(ponytype)} // offset: #{offset}" end)
            |> Enum.join("\n")
 
       """
@@ -44,7 +88,7 @@ defmodule CastXMLPony do
     end
   end
 
-  def ponydefault(x = <<"Pointer"::utf8, rest::binary>>), do: x
+  def ponydefault(x = <<"Pointer"::utf8, _rest::binary>>), do: x
   def ponydefault(x), do: "#{x}(0)"
 
 
@@ -72,7 +116,7 @@ defmodule CastXMLPony do
   end
 
 
-  def makeargs([], filename), do: ""
+  def makeargs([], _filename), do: ""
   def makeargs(listofargs, filename) do
     len = Enum.count(listofargs)
 
@@ -119,37 +163,38 @@ defmodule CastXMLPony do
     |> Enum.reduce("", &rationalizeType/2)
   end
 
-  def rationalizeType(%{name: name, recordType: :Field}, acc), do: acc
-  def rationalizeType(%{name: name, recordType: :Enumeration}, acc), do: "I32"
-  def rationalizeType(%{name: name, recordType: :FunctionType}, acc), do: "FUNCTIONPOINTER"
+  def rationalizeType(%{name: _name, recordType: :Field}, acc), do: acc
+  def rationalizeType(%{name: _name, recordType: :Enumeration}, _acc), do: "I32"
+  def rationalizeType(%{name: _name, recordType: :FunctionType}, _acc), do: "FUNCTIONPOINTER"
   def rationalizeType(%{name: name, recordType: :Struct}, acc), do: toPonyPrimitive(name) <> acc
-  def rationalizeType(%{name: name, recordType: :PointerType}, acc), do: "Pointer[#{acc}]"
+  def rationalizeType(%{name: _name, recordType: :PointerType}, acc), do: "Pointer[#{acc}]"
+  def rationalizeType(%{name: _name, recordType: :ArrayType}, acc), do: "Pointer[#{acc}]"
 
   def rationalizeType(%{name: "int", recordType: :FundamentalType}, ""), do: "I32"
-  def rationalizeType(%{name: "void"}, acc),                   do: "None"
+  def rationalizeType(%{name: "void"}, _acc),                   do: "None"
 
-  def rationalizeType(%{name: "_Bool"}, acc),                  do: "Bool"
+  def rationalizeType(%{name: "_Bool"}, _acc),                  do: "Bool"
 
-  def rationalizeType(%{name: "char"}, acc),                   do: "I8"
-  def rationalizeType(%{name: "signed char"}, acc),            do: "I8"
-  def rationalizeType(%{name: "unsigned char"}, acc),          do: "U8"
+  def rationalizeType(%{name: "char"}, _acc),                   do: "I8"
+  def rationalizeType(%{name: "signed char"}, _acc),            do: "I8"
+  def rationalizeType(%{name: "unsigned char"}, _acc),          do: "U8"
 
-  def rationalizeType(%{name: "short int"}, acc),              do: "I16"
-  def rationalizeType(%{name: "short unsigned int"}, acc),     do: "U16"
+  def rationalizeType(%{name: "short int"}, _acc),              do: "I16"
+  def rationalizeType(%{name: "short unsigned int"}, _acc),     do: "U16"
 
-  def rationalizeType(%{name: "unsigned int"}, acc),           do: "U32"
-  def rationalizeType(%{name: "float"}, acc),                  do: "F32"
-  def rationalizeType(%{name: "int"}, acc),                    do: "I32"
+  def rationalizeType(%{name: "unsigned int"}, _acc),           do: "U32"
+  def rationalizeType(%{name: "float"}, _acc),                  do: "F32"
+  def rationalizeType(%{name: "int"}, _acc),                    do: "I32"
 
-  def rationalizeType(%{name: "long int"}, acc),               do: "I64"
-  def rationalizeType(%{name: "long unsigned int"}, acc),      do: "U64"
-  def rationalizeType(%{name: "double"}, acc),                 do: "F64"
-  def rationalizeType(%{name: "long long unsigned int"}, acc), do: "U64"
-  def rationalizeType(%{name: "long long int"}, acc),          do: "I64"
+  def rationalizeType(%{name: "long int"}, _acc),               do: "I64"
+  def rationalizeType(%{name: "long unsigned int"}, _acc),      do: "U64"
+  def rationalizeType(%{name: "double"}, _acc),                 do: "F64"
+  def rationalizeType(%{name: "long long unsigned int"}, _acc), do: "U64"
+  def rationalizeType(%{name: "long long int"}, _acc),          do: "I64"
 
-  def rationalizeType(%{name: "__int128"}, acc),               do: "I128"
-  def rationalizeType(%{name: "unsigned __int128"}, acc),      do: "U128"
-  def rationalizeType(%{name: "long double"}, acc),            do: "F128"
+  def rationalizeType(%{name: "__int128"}, _acc),               do: "I128"
+  def rationalizeType(%{name: "unsigned __int128"}, _acc),      do: "U128"
+  def rationalizeType(%{name: "long double"}, _acc),            do: "F128"
 
 
 
@@ -162,8 +207,8 @@ defmodule CastXMLPony do
 
 
 
-  defmemo recurseType(filename, %{id: ""}, acc), do: acc
-  defmemo recurseType(filename, x = %{id: id, name: name, type: type}, acc) do
+  defmemo recurseType(_filename, %{id: ""}, acc), do: acc
+  defmemo recurseType(filename, x = %{id: _id, name: _name, type: type}, acc) do
     map = typeByID(filename, type)
     recurseType(filename, map, [x|acc])
   end
