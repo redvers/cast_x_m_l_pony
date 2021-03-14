@@ -1,5 +1,6 @@
 import SweetXml
 defmodule CastXMLPony do
+  use Memoize
   def main() do
     f("pcre2.xml")
   end
@@ -56,7 +57,7 @@ defmodule CastXMLPony do
     )
   end
 
-  def recurseType(filename, id) do
+  defmemo recurseType(filename, id) do
     recurseType(filename, typeByID(filename, id), [])
     |> rationalizeType()
   end
@@ -109,8 +110,8 @@ defmodule CastXMLPony do
 
 
 
-  def recurseType(filename, %{id: ""}, acc), do: acc
-  def recurseType(filename, x = %{id: id, name: name, type: type}, acc) do
+  defmemo recurseType(filename, %{id: ""}, acc), do: acc
+  defmemo recurseType(filename, x = %{id: id, name: name, type: type}, acc) do
     map = typeByID(filename, type)
     recurseType(filename, map, [x|acc])
   end
@@ -121,7 +122,7 @@ defmodule CastXMLPony do
 
 
 
-  def typeByID(filename, id) do
+  defmemo typeByID(filename, id) do
     entry = 
     f(filename)
     |> xpath(~x"//*[@id='#{id}']")
