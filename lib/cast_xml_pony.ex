@@ -52,7 +52,6 @@ defmodule CastXMLPony do
     |> Enum.map(&IO.puts/1)
   end
 
-
   defmemo f(filename) do
     File.read!(filename)
     |> xpath(~x".")
@@ -201,10 +200,12 @@ defmodule CastXMLPony do
     |> Enum.reduce("", &rationalizeType/2)
   end
 
-  def rationalizeType(%{name: _name, recordType: :Field}, acc), do: acc
+  def rationalizeType(%{name: name,  recordType: :Struct}, acc), do: toPonyPrimitive(name) <> acc
   def rationalizeType(%{name: _name, recordType: :Enumeration}, _acc), do: "I32"
   def rationalizeType(%{name: _name, recordType: :FunctionType}, _acc), do: "FUNCTIONPOINTER"
-  def rationalizeType(%{name: name, recordType: :Struct}, acc), do: toPonyPrimitive(name) <> acc
+  def rationalizeType(%{name: _name, recordType: :Field}, acc), do: acc
+  def rationalizeType(%{name: _name, recordType: :ArrayType}, acc), do: "Pointer[#{acc}]"
+
   def rationalizeType(%{name: _name, recordType: :PointerType}, "I8"), do: "Pointer[U8] tag"
   def rationalizeType(%{name: _name, recordType: :PointerType}, "U8"), do: "Pointer[U8] tag"
   def rationalizeType(%{name: _name, recordType: :PointerType}, x = <<"Pointer"::utf8, _rest::binary>>), do: "Pointer[#{x}]"
@@ -217,33 +218,33 @@ defmodule CastXMLPony do
       false -> "NullablePointer[#{acc}]"
     end
   end
-  def rationalizeType(%{name: _name, recordType: :ArrayType}, acc), do: "Pointer[#{acc}]"
+
 
   def rationalizeType(%{name: "int", recordType: :FundamentalType}, ""), do: "I32"
-  def rationalizeType(%{name: "void"}, _acc),                   do: "None"
+  def rationalizeType(%{name: "void", recordType: :FundamentalType}, _acc),                   do: "None"
 
-  def rationalizeType(%{name: "_Bool"}, _acc),                  do: "Bool"
+  def rationalizeType(%{name: "_Bool", recordType: :FundamentalType}, _acc),                  do: "Bool"
 
-  def rationalizeType(%{name: "char"}, _acc),                   do: "I8"
-  def rationalizeType(%{name: "signed char"}, _acc),            do: "I8"
-  def rationalizeType(%{name: "unsigned char"}, _acc),          do: "U8"
+  def rationalizeType(%{name: "char", recordType: :FundamentalType}, _acc),                   do: "I8"
+  def rationalizeType(%{name: "signed char", recordType: :FundamentalType}, _acc),            do: "I8"
+  def rationalizeType(%{name: "unsigned char", recordType: :FundamentalType}, _acc),          do: "U8"
 
-  def rationalizeType(%{name: "short int"}, _acc),              do: "I16"
-  def rationalizeType(%{name: "short unsigned int"}, _acc),     do: "U16"
+  def rationalizeType(%{name: "short int", recordType: :FundamentalType}, _acc),              do: "I16"
+  def rationalizeType(%{name: "short unsigned int", recordType: :FundamentalType}, _acc),     do: "U16"
 
-  def rationalizeType(%{name: "unsigned int"}, _acc),           do: "U32"
-  def rationalizeType(%{name: "float"}, _acc),                  do: "F32"
-  def rationalizeType(%{name: "int"}, _acc),                    do: "I32"
+  def rationalizeType(%{name: "unsigned int", recordType: :FundamentalType}, _acc),           do: "U32"
+  def rationalizeType(%{name: "float", recordType: :FundamentalType}, _acc),                  do: "F32"
+  def rationalizeType(%{name: "int", recordType: :FundamentalType}, _acc),                    do: "I32"
 
-  def rationalizeType(%{name: "long int"}, _acc),               do: "I64"
-  def rationalizeType(%{name: "long unsigned int"}, _acc),      do: "U64"
-  def rationalizeType(%{name: "double"}, _acc),                 do: "F64"
-  def rationalizeType(%{name: "long long unsigned int"}, _acc), do: "U64"
-  def rationalizeType(%{name: "long long int"}, _acc),          do: "I64"
+  def rationalizeType(%{name: "long int", recordType: :FundamentalType}, _acc),               do: "I64"
+  def rationalizeType(%{name: "long unsigned int", recordType: :FundamentalType}, _acc),      do: "U64"
+  def rationalizeType(%{name: "double", recordType: :FundamentalType}, _acc),                 do: "F64"
+  def rationalizeType(%{name: "long long unsigned int", recordType: :FundamentalType}, _acc), do: "U64"
+  def rationalizeType(%{name: "long long int", recordType: :FundamentalType}, _acc),          do: "I64"
 
-  def rationalizeType(%{name: "__int128"}, _acc),               do: "I128"
-  def rationalizeType(%{name: "unsigned __int128"}, _acc),      do: "U128"
-  def rationalizeType(%{name: "long double"}, _acc),            do: "F128"
+  def rationalizeType(%{name: "__int128", recordType: :FundamentalType}, _acc),               do: "I128"
+  def rationalizeType(%{name: "unsigned __int128", recordType: :FundamentalType}, _acc),      do: "U128"
+  def rationalizeType(%{name: "long double", recordType: :FundamentalType}, _acc),            do: "F128"
 
   def isPonyPrimitive?("None"), do: true
   def isPonyPrimitive?("Bool"), do: true
@@ -437,5 +438,4 @@ defmodule CastXMLPony do
     """)
 
   end
-
 end
