@@ -206,11 +206,11 @@ defmodule CastXMLPony do
     )
 
     case Map.get(smap, :members) do
-      "" -> "primitive #{toPonyPrimitive(smap.name)}"
+      "" -> "struct #{toPonyPrimitive(smap.name)}"
       x -> fields =
            String.split(x, " ") 
            |> Enum.map(&(fieldMap(filename, &1)))
-           |> Enum.map(fn(%{name: name, ponytype: ponytype, offset: offset}) -> "  var #{name}: #{ponytype} = #{ponydefault(ponytype)} // offset: #{offset}" end)
+           |> Enum.map(fn(%{name: name, ponytype: ponytype, offset: offset}) -> "  var p#{name}: #{ponytype} = #{ponydefault(ponytype)} // offset: #{offset}" end)
            |> Enum.join("\n")
 
       """
@@ -221,7 +221,8 @@ defmodule CastXMLPony do
     end
   end
 
-  def ponydefault(x = <<"Pointer"::utf8, _rest::binary>>), do: x
+  def ponydefault(x = <<"Pointer"::utf8, _rest::binary>>), do: String.replace(x, " tag", "")
+  def ponydefault(x = <<"NullablePointer"::utf8, _rest::binary>>), do: "#{String.replace(x, " tag", "")}.none()"
   def ponydefault(x), do: "#{x}(0)"
 
 
@@ -300,7 +301,17 @@ defmodule CastXMLPony do
   def rationalizeType(%{name: _name, recordType: :Enumeration}, _acc), do: "I32"
   def rationalizeType(%{name: _name, recordType: :FunctionType}, _acc), do: "FUNCTIONPOINTER"
   def rationalizeType(%{name: name, recordType: :Struct}, acc), do: toPonyPrimitive(name) <> acc
-  def rationalizeType(%{name: _name, recordType: :PointerType}, acc), do: "Pointer[#{acc}]"
+  def rationalizeType(%{name: _name, recordType: :PointerType}, "I8"), do: "Pointer[U8] tag"
+  def rationalizeType(%{name: _name, recordType: :PointerType}, "U8"), do: "Pointer[U8] tag"
+  def rationalizeType(%{name: _name, recordType: :PointerType}, x = <<"Pointer"::utf8, _rest::binary>>), do: "Pointer[#{x}]"
+  def rationalizeType(%{name: _name, recordType: :PointerType}, "None"), do: "Pointer[U8]"
+  def rationalizeType(%{name: _name, recordType: :PointerType}, "FUNCTIONPOINTER"), do: "Pointer[FUNCTIONPOINTER]"
+  def rationalizeType(%{name: _name, recordType: :PointerType}, acc) do
+    case isPonyPrimitive?(acc) do
+      true ->  "Pointer[#{acc}]"
+      false -> "NullablePointer[#{acc}]"
+    end
+  end
   def rationalizeType(%{name: _name, recordType: :ArrayType}, acc), do: "Pointer[#{acc}]"
 
   def rationalizeType(%{name: "int", recordType: :FundamentalType}, ""), do: "I32"
@@ -328,6 +339,32 @@ defmodule CastXMLPony do
   def rationalizeType(%{name: "__int128"}, _acc),               do: "I128"
   def rationalizeType(%{name: "unsigned __int128"}, _acc),      do: "U128"
   def rationalizeType(%{name: "long double"}, _acc),            do: "F128"
+
+  def isPonyPrimitive?("None"), do: true
+  def isPonyPrimitive?("Bool"), do: true
+
+  def isPonyPrimitive?("I8"), do: true
+  def isPonyPrimitive?("I16"), do: true
+  def isPonyPrimitive?("I32"), do: true
+  def isPonyPrimitive?("I64"), do: true
+  def isPonyPrimitive?("I128"), do: true
+  def isPonyPrimitive?("ISize"), do: true
+  def isPonyPrimitive?("ILong"), do: true
+
+  def isPonyPrimitive?("U8"), do: true
+  def isPonyPrimitive?("U16"), do: true
+  def isPonyPrimitive?("U32"), do: true
+  def isPonyPrimitive?("U64"), do: true
+  def isPonyPrimitive?("U128"), do: true
+  def isPonyPrimitive?("USize"), do: true
+  def isPonyPrimitive?("ULong"), do: true
+
+  def isPonyPrimitive?("F32"), do: true
+  def isPonyPrimitive?("F64"), do: true
+  def isPonyPrimitive?("F128"), do: true
+
+  def isPonyPrimitive?(_), do: false
+
 
 
 
