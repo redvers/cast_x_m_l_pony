@@ -123,10 +123,7 @@ defmodule CastXMLPony do
   def ponydefault(x = <<"NullablePointer"::utf8, _rest::binary>>), do: "#{String.replace_trailing(x, " tag", "")}.none()"
   def ponydefault(x), do: x
 
-  def ponydefault("None"), do: true
   def isPonyPrimitive("Bool"), do: true
-
-
 
   def fieldMap(filename, id) do
     map =
@@ -152,6 +149,51 @@ defmodule CastXMLPony do
     "use @#{name}[#{String.replace(recurseType(filename, returns), " tag", "")}](#{makeargs(args,filename)})"
   end
 
+  def genFunctionWrapper(filename, functionname) do
+    %{args: args, name: name, returns: returns} = functionByName(filename, functionname)
+    
+    rvorig = recurseType(filename, returns) |> String.replace(" tag", "")
+    rv     = %{name: "rv", type: returns} |> makeponyarg(filename)
+    """
+      fun #{name}(#{makeponyargs(args,filename)})#{rv.type} =>
+        var tmpvar: #{rvorig} = @#{functionname}[#{rvorig}](#{makeCargs(args,filename)})
+        #{translateReturn(rvorig)}
+    """
+  end
+
+  def translateReturn("Pointer[U8]") do
+    """
+    let p: String iso = String.from_cstring(tmpvar).clone()
+        consume p
+    """
+  end
+  def translateReturn(x), do: "tmpvar"
+
+  def makeCargs(arglist, filename) do
+    Enum.map(arglist, &(makeCarg(&1,filename)))
+    |> Enum.map(&("p#{&1.name}#{&1.type}"))
+    |> Enum.join(", ")
+  end
+  def makeponyargs(arglist, filename) do
+    Enum.map(arglist, &(makeponyarg(&1,filename)))
+    |> Enum.map(&("p#{&1.name}#{&1.type}"))
+    |> Enum.join(", ")
+  end
+
+  def makeCarg(%{name: name, type: type}, filename) do
+    %{name: name, type: ponyCArgOverride(recurseType(filename, type))}
+  end
+  def makeponyarg(%{name: name, type: type}, filename) do
+    %{name: name, type: ponyArgOverride(recurseType(filename, type))}
+  end
+
+  def ponyCArgOverride("Pointer[U8] tag"), do: ".cstring()"
+  def ponyCArgOverride(x),                 do: ""
+  def ponyArgOverride("Pointer[U8] tag"),  do: ": String"
+  def ponyArgOverride(x),                  do: ": #{x}"
+
+
+
 
   def makeargs([], _filename), do: ""
   def makeargs(listofargs, filename) do
@@ -163,7 +205,14 @@ defmodule CastXMLPony do
     |> Enum.join(", ")
   end
 
-
+  def defineTypes(filename, fid) do
+    functions(filename, fid)
+    |> Enum.map(&(functionByName(filename, &1)))
+    |> Enum.map(fn(%{args: list, returns: returns}) -> [returns | Enum.map(list, &(&1.type))] end)
+    |> List.flatten
+    |> Enum.uniq
+  end
+    
 
 
 
@@ -438,4 +487,6 @@ defmodule CastXMLPony do
     """)
 
   end
+
+
 end
