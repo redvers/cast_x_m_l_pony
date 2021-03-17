@@ -2,47 +2,67 @@ import SweetXml
 defmodule CastXMLPony do
   use Memoize
   def main(args) do
-    opts = [help: :boolean, xmlfile: :string, structs: :boolean, uses: :boolean, list: :boolean, fileid: :string, generate: :boolean]
-    aliases = [h: :help, x: :xmlfile, s: :structs, u: :uses, l: :list, f: :fileid, g: :generate]
+    opts = [help: :boolean, xmlfile: :string, structs: :boolean, uses: :boolean, list: :boolean, generate: :boolean, functions: :boolean]
+    aliases = [h: :help, x: :xmlfile, s: :structs, u: :uses, f: :functions, l: :list, g: :generate]
     options = [strict: opts, aliases: aliases]
-    {opts,_} = OptionParser.parse!(args, options)
+    {opts,fids} = OptionParser.parse!(args, options)
 
     optmap = Enum.into(opts, Map.new)
+             |> Map.put(:fileid, fids)
 
     if (Map.get(optmap, :help, false)) do
       printhelp()
       :erlang.halt()
     end
 
-    if (Map.get(optmap, :list, false) and (Map.get(optmap, :fileid, false) == false)), do: listfiles(optmap.xmlfile)
-    if (Map.get(optmap, :list, false) and is_binary(Map.get(optmap, :fileid, false))) do
+    #    if (Map.get(optmap, :list, false) and (Map.get(optmap, :fileid, false) == false)), do: listfiles(optmap.xmlfile)
+    IO.inspect(optmap)
+    if (Map.get(optmap, :list, false) and is_list(Map.get(optmap, :fileid, false))) do
       if (Map.get(optmap, :structs, false)) do
         IO.puts("Structs:")
-        structs(optmap.xmlfile, optmap.fileid)
-        |> Enum.map(&IO.puts/1)
+        Enum.map(optmap.fileid, &({&1,structs(optmap.xmlfile, &1)}))
+        |> Enum.map(fn({fid,symbols}) -> Enum.map(symbols, &("#{fid}:#{&1}")) |> Enum.join("\n") end)
+        |> Enum.join("\n")
+        |> IO.puts
       end
       if (Map.get(optmap, :uses, false)) do
         IO.puts("Functions:")
-        functions(optmap.xmlfile, optmap.fileid)
-        |> Enum.map(&IO.puts/1)
+        Enum.map(optmap.fileid, &({&1,functions(optmap.xmlfile, &1)}))
+        |> Enum.map(fn({fid,symbols}) -> Enum.map(symbols, &("#{fid}:#{&1}")) |> Enum.join("\n") end)
+        |> Enum.join("\n")
+        |> IO.puts
       end
     end
 
-    if (Map.get(optmap, :generate, false) and is_binary(Map.get(optmap, :fileid, false))) do
+    if (Map.get(optmap, :generate, false) and is_list(Map.get(optmap, :fileid, false))) do
       if (Map.get(optmap, :structs, false)) do
-        structs(optmap.xmlfile, optmap.fileid)
+        Enum.map(optmap.fileid, &(structs(optmap.xmlfile, &1)))
+        |> List.flatten
         |> Enum.map(&(useStructReal(optmap.xmlfile, &1)))
         |> Enum.join("\n\n")
         |> IO.puts
       end
       if (Map.get(optmap, :uses, false)) do
-        functions(optmap.xmlfile, optmap.fileid)
+        Enum.map(optmap.fileid, &(functions(optmap.xmlfile, &1)))
+        |> List.flatten
+        |> Enum.reject(&(Regex.match?(~r/^_/, &1)))
         |> Enum.map(&(useFunction(optmap.xmlfile, &1)))
         |> Enum.join("\n")
         |> IO.puts
       end
     end
 
+    if (Map.get(optmap, :functions, false)) do
+      IO.puts("Generate functions for: #{inspect(Map.get(optmap, :fileid, []))}")
+      Enum.map(optmap.fileid, &(functions(optmap.xmlfile, &1)))
+      |> List.flatten
+      |> Enum.uniq
+      |> Enum.map(&(genFunctionWrapper(optmap.xmlfile, &1)))
+      |> Enum.join("\n")
+      |> IO.puts
+
+
+    end
   end
 
   def listfiles(filename) do
